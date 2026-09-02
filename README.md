@@ -36,8 +36,9 @@ this repo must agree with it.
 scenarios/
   range-web-1/manifest.yaml        k3s manifest (tier-1 apps + Traefik routes)
   range-web-1/build/               local vulnerable app images (see its README)
-  range-web-2/docker-compose.yml   facades, tier-2 apps, cert terminators
-  range-web-2/facades/             fingerprint-only static sites
+  range-web-2/docker-compose.yml   facades, tier-2 apps, cert terminators, SNI router
+  range-web-2/sni-router.conf      stream ssl_preread router owning host 443
+  range-web-2/facades/             fingerprint-only static sites (+ tls.conf)
   range-web-2/apps/                tier-2 detector apps
   range-web-2/tls/                 cert-defect nginx terminator configs
   range-legacy/docker-compose.yml  real empty services + banner sockets
@@ -61,7 +62,13 @@ bundle and brings up its slice:
    `scenarios/range-web-1/manifest.yaml`, then
    `k3s kubectl apply -f manifest.yaml`.
 3. **`range-web-2`** — `docker compose up -d` from `scenarios/range-web-2/`
-   (after step 1, which its TLS terminators mount).
+   (after step 1, which its TLS backends mount). All nine TLS scenarios (the
+   four fingerprint facades and the five cert-defect hosts) share the host's
+   single port 443: the `sni-router` container owns 443 and, using an nginx
+   `stream` block with `ssl_preread`, passes each TLS connection through by SNI
+   hostname to the right backend — no re-termination, so each cert-defect host's
+   intentionally-broken cert reaches the scanner unchanged. Those backends are
+   internal-only (no host port); only the router publishes `443:443`.
 4. **`range-legacy`** — `docker compose up -d` from `scenarios/range-legacy/`.
 5. Copy `web/robots.txt` and `web/.well-known/security.txt` onto each web host.
 

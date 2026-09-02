@@ -63,6 +63,18 @@ sign_with_ca "oldtls" 365 "oldtls.${BASE_DOMAIN}"
 # 5. expiring: valid today but notAfter is < 14 days away.
 sign_with_ca "expiring" 7 "expiring.${BASE_DOMAIN}"
 
+# --- valid facade cert (multi-SAN), range-CA signed -------------------------
+# The four fingerprint facades sit behind the SNI router and terminate TLS with
+# this one valid cert (they are ct-log-discoverable, so they must present a cert).
+FSAN="subjectAltName=DNS:sfdc.${BASE_DOMAIN},DNS:aem.${BASE_DOMAIN}"
+FSAN="${FSAN},DNS:telerik.${BASE_DOMAIN},DNS:moveit.${BASE_DOMAIN}"
+openssl req $KEYOPTS -keyout "$OUT/facade.key" -out "$OUT/facade.csr" \
+    -subj "${SUBJ_O}/CN=sfdc.${BASE_DOMAIN}" -addext "$FSAN" 2>/dev/null
+openssl x509 -req -in "$OUT/facade.csr" -days 365 -copy_extensions copy \
+    -CA "$OUT/range-ca.crt" -CAkey "$OUT/range-ca.key" -CAcreateserial \
+    -out "$OUT/facade.crt" 2>/dev/null
+rm -f "$OUT/facade.csr"
+
 # --- weak-TLS terminator snippet for the oldtls host ------------------------
 # nginx TLS terminator forced to legacy protocols/ciphers. Wired into the
 # oldtls container in scenarios/range-web-2/docker-compose.yml.
@@ -79,4 +91,4 @@ server {
 }
 NGINX
 
-echo "generated 5 defective certs + oldtls.nginx.conf in $OUT"
+echo "generated 5 defective certs + facade cert + oldtls.nginx.conf in $OUT"

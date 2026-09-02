@@ -12,6 +12,7 @@ certs/out/
 __pycache__/
 *.pyc
 .venv/
+*.egg-info/
 
 # terraform outputs captured locally
 outputs.json
