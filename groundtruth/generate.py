@@ -60,6 +60,7 @@ def build_manifest(catalogue: dict, base_domain: str, host_eips: dict[str, str])
                 "app": entry.get("app"),
                 "tier": entry.get("tier"),
                 "discovery": entry.get("discovery", "none"),
+                "discovery_channel": entry.get("discovery_channel", "none"),
                 "expected_templates": entry.get("expected_templates", []),
                 "custom_template": entry.get("custom_template", False),
                 "certificate_issues": entry.get("certificate_issues", []),

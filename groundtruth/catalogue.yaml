@@ -14,6 +14,19 @@
 #   brute-force - only reachable by subdomain/vhost brute force
 #   seed        - handed to the scanner as an explicit seed root
 #   none        - raw service, not a web asset (legacy host)
+#
+# discovery_channel: which real discovery channel modules/test-range/dns.tf
+# wires the hostname to (local.range_hosts is authoritative; this mirrors it).
+#   ct          - individual ACM cert issued for the exact hostname, logged
+#                 to CT (see modules/test-range/ct_certs.tf)
+#   brute_force - dictionary-word label, no cert; only found by an active
+#                 subdomain/vhost brute-force wordlist
+#   none        - unguessable control label, no cert, not a real scenario;
+#                 must NEVER be discovered (see the control entries below)
+# Only the exact 32 hostnames in local.range_hosts have a real discovery
+# channel; every other scenario hostname keeps `discovery_channel` derived
+# from its legacy `discovery` value (seed/brute-force -> brute_force,
+# ct-log -> ct, none -> none) since it isn't wired to that infra.
 
 meta:
   range: aisy-test-range
@@ -34,6 +47,7 @@ scenarios:
     app: "log4shell target (vulnerable-app pinned to log4j 2.14.1)"
     tier: 1
     discovery: seed
+    discovery_channel: brute_force
     expected_templates: ["log4j-rce"]
     custom_template: true
     certificate_issues: []
@@ -47,6 +61,7 @@ scenarios:
     app: "mongo-express 0.54.0 (CVE-2019-10758 RCE via endpoint)"
     tier: 1
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["CVE-2019-10758"]
     custom_template: true
     certificate_issues: []
@@ -60,6 +75,7 @@ scenarios:
     app: "Apache httpd 2.4.48 mod_proxy (CVE-2021-40438 SSRF)"
     tier: 1
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["CVE-2021-40438"]
     custom_template: true
     certificate_issues: []
@@ -73,6 +89,7 @@ scenarios:
     app: "Spring Cloud Gateway 3.1.0 + actuator (CVE-2022-22947 SpEL RCE)"
     tier: 1
     discovery: seed
+    discovery_channel: brute_force
     expected_templates: ["CVE-2022-22947", "springboot-actuators"]
     custom_template: true
     certificate_issues: []
@@ -86,6 +103,7 @@ scenarios:
     app: "Go net/http/pprof debug endpoints exposed"
     tier: 1
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["exposed_pprof"]
     custom_template: true
     certificate_issues: []
@@ -99,6 +117,7 @@ scenarios:
     app: "static site serving a checked-in .git/ directory"
     tier: 1
     discovery: seed
+    discovery_channel: brute_force
     expected_templates: ["git-config"]
     custom_template: true
     certificate_issues: []
@@ -116,6 +135,7 @@ scenarios:
     app: "Laravel app with APP_DEBUG=true (debug-mode info leak via POST)"
     tier: 1
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["laravel-debug-post"]
     custom_template: true
     certificate_issues: []
@@ -132,6 +152,7 @@ scenarios:
     app: "path-traversal facade shaped as Umbraco CMS local-file-open"
     tier: 1
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["Umbraco-CMS-LFO"]
     custom_template: true
     certificate_issues: []
@@ -145,6 +166,7 @@ scenarios:
     app: "path-traversal facade shaped as a WordPress plugin LFI"
     tier: 1
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["wordpress_lfi"]
     custom_template: true
     certificate_issues: []
@@ -158,6 +180,7 @@ scenarios:
     app: "app that reflects raw SQL errors on tampered id param"
     tier: 1
     discovery: seed
+    discovery_channel: brute_force
     expected_templates: ["SQLInjection_ERROR", "errors"]
     custom_template: true
     certificate_issues: []
@@ -171,6 +194,7 @@ scenarios:
     app: "single-page app with reflected + DOM-based XSS sink"
     tier: 1
     discovery: seed
+    discovery_channel: brute_force
     expected_templates: ["dom-xss"]
     custom_template: true
     certificate_issues: []
@@ -187,6 +211,7 @@ scenarios:
     app: "static facade emitting Salesforce Lightning aura fingerprints"
     tier: fingerprint
     discovery: ct-log
+    discovery_channel: ct
     expected_templates: ["salesforce-aura"]
     custom_template: true
     certificate_issues: []
@@ -200,6 +225,7 @@ scenarios:
     app: "static facade emitting Adobe AEM fingerprints"
     tier: fingerprint
     discovery: ct-log
+    discovery_channel: ct
     expected_templates: ["aem-tech-detect"]
     custom_template: true
     certificate_issues: []
@@ -213,6 +239,7 @@ scenarios:
     app: "static facade emitting Telerik UI fingerprints"
     tier: fingerprint
     discovery: ct-log
+    discovery_channel: ct
     expected_templates: ["telerik-detect"]
     custom_template: true
     certificate_issues: []
@@ -226,6 +253,7 @@ scenarios:
     app: "app that sets a rememberMe Apache Shiro cookie"
     tier: fingerprint
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["shiro-detect"]
     custom_template: true
     certificate_issues: []
@@ -239,6 +267,7 @@ scenarios:
     app: "static facade shaped as Progress MOVEit Transfer"
     tier: fingerprint
     discovery: ct-log
+    discovery_channel: ct
     expected_templates: ["MOVEIT-SQLi"]
     custom_template: true
     certificate_issues: []
@@ -252,6 +281,7 @@ scenarios:
     app: "GraphQL endpoint with introspection enabled"
     tier: 2
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["graphql-introspection"]
     custom_template: false
     certificate_issues: []
@@ -265,6 +295,7 @@ scenarios:
     app: "app serving an ASP.NET viewstate cookie signed with a known test key"
     tier: 2
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["badsecrets-known-key"]
     custom_template: false
     certificate_issues: []
@@ -281,6 +312,7 @@ scenarios:
     app: "reflector that echoes an unkeyed X-Forwarded-Host header"
     tier: 2
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["cache-poisoning-reflector"]
     custom_template: false
     certificate_issues: []
@@ -294,6 +326,7 @@ scenarios:
     app: "path returning 403 that is bypassable via header/path tricks"
     tier: 2
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["403-bypass"]
     custom_template: false
     certificate_issues: []
@@ -307,6 +340,7 @@ scenarios:
     app: "service exposing a swagger/openapi spec at /openapi.json"
     tier: 2
     discovery: seed
+    discovery_channel: brute_force
     expected_templates: ["swagger-api"]
     custom_template: false
     certificate_issues: []
@@ -320,6 +354,7 @@ scenarios:
     app: "SPA whose JS bundle leaks an internal path + a fake API key"
     tier: 2
     discovery: seed
+    discovery_channel: brute_force
     expected_templates: ["js-exposed-key"]
     custom_template: false
     certificate_issues: []
@@ -339,6 +374,7 @@ scenarios:
     app: "name-based vhost only reachable via Host header (brute-force target)"
     tier: 2
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["vhost-detect"]
     custom_template: false
     certificate_issues: []
@@ -352,6 +388,7 @@ scenarios:
     app: "static facade emitting IIS server headers + shape"
     tier: 2
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["iis-detect"]
     custom_template: false
     certificate_issues: []
@@ -365,6 +402,7 @@ scenarios:
     app: "admin panel accepting a documented default credential"
     tier: 2
     discovery: brute-force
+    discovery_channel: brute_force
     expected_templates: ["default-login"]
     custom_template: false
     certificate_issues: []
@@ -375,6 +413,9 @@ scenarios:
 
   # ---------------------------------------------------------------------------
   # Certificate defect hosts (range-web-2 TLS terminators) - see certs/generate.sh
+  # Each of these 5 also gets an individual ACM cert for its exact hostname
+  # (modules/test-range/ct_certs.tf), so all 5 are discovery_channel: ct -
+  # regardless of the intentionally-broken cert the host actually serves.
   # ---------------------------------------------------------------------------
   - id: cert-expired
     host: range-web-2
@@ -384,6 +425,7 @@ scenarios:
     app: "TLS terminator presenting an expired certificate"
     tier: cert
     discovery: ct-log
+    discovery_channel: ct
     expected_templates: []
     custom_template: false
     certificate_issues: ["expired"]
@@ -397,6 +439,7 @@ scenarios:
     app: "TLS terminator presenting a self-signed certificate"
     tier: cert
     discovery: brute-force
+    discovery_channel: ct
     expected_templates: []
     custom_template: false
     certificate_issues: ["self_signed"]
@@ -410,6 +453,7 @@ scenarios:
     app: "TLS terminator whose cert CN/SAN does not match the hostname"
     tier: cert
     discovery: brute-force
+    discovery_channel: ct
     expected_templates: []
     custom_template: false
     certificate_issues: ["name_mismatch"]
@@ -423,6 +467,7 @@ scenarios:
     app: "TLS terminator negotiating only TLS 1.0/1.1 with weak ciphers"
     tier: cert
     discovery: brute-force
+    discovery_channel: ct
     expected_templates: []
     custom_template: false
     certificate_issues: ["weak_tls"]
@@ -436,6 +481,7 @@ scenarios:
     app: "TLS terminator whose certificate expires soon (< 14 days)"
     tier: cert
     discovery: ct-log
+    discovery_channel: ct
     expected_templates: []
     custom_template: false
     certificate_issues: ["expiring_soon"]
@@ -443,6 +489,9 @@ scenarios:
 
   # ---------------------------------------------------------------------------
   # range-legacy (docker-compose) - raw services + banner-only sockets
+  # discovery_channel: none here means "not a hostname-discovery scenario"
+  # (reached by IP/port, not CT or brute-force) - NOT a control host. Only the
+  # tier: control entries below are subject to the control-host check.
   # ---------------------------------------------------------------------------
   - id: legacy-ftp
     host: range-legacy
@@ -452,6 +501,7 @@ scenarios:
     app: "real vsftpd with an empty anonymous share"
     tier: service
     discovery: none
+    discovery_channel: none
     expected_templates: []
     custom_template: false
     certificate_issues: []
@@ -465,6 +515,7 @@ scenarios:
     app: "real MySQL with an empty database (banner reachable)"
     tier: service
     discovery: none
+    discovery_channel: none
     expected_templates: []
     custom_template: false
     certificate_issues: []
@@ -478,6 +529,7 @@ scenarios:
     app: "real PostgreSQL with an empty database (banner reachable)"
     tier: service
     discovery: none
+    discovery_channel: none
     expected_templates: []
     custom_template: false
     certificate_issues: []
@@ -491,6 +543,7 @@ scenarios:
     app: "real Redis with no data (banner reachable)"
     tier: service
     discovery: none
+    discovery_channel: none
     expected_templates: []
     custom_template: false
     certificate_issues: []
@@ -504,6 +557,7 @@ scenarios:
     app: "banner-only socket announcing an old OpenSSH version"
     tier: banner
     discovery: none
+    discovery_channel: none
     expected_templates: []
     custom_template: false
     certificate_issues: []
@@ -517,6 +571,7 @@ scenarios:
     app: "banner-only socket announcing a telnet login prompt"
     tier: banner
     discovery: none
+    discovery_channel: none
     expected_templates: []
     custom_template: false
     certificate_issues: []
@@ -530,6 +585,7 @@ scenarios:
     app: "banner-only socket announcing an SMB service"
     tier: banner
     discovery: none
+    discovery_channel: none
     expected_templates: []
     custom_template: false
     certificate_issues: []
@@ -543,6 +599,56 @@ scenarios:
     app: "banner-only socket announcing an RDP service"
     tier: banner
     discovery: none
+    discovery_channel: none
+    expected_templates: []
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  # ---------------------------------------------------------------------------
+  # Control hosts (modules/test-range/dns.tf local.range_hosts, discovery =
+  # "none") - unguessable labels, plain A record, no cert, no app. They exist
+  # only to confirm the scanner does NOT find them: a hit here means a real
+  # leak or an over-broad brute-force wordlist. tier: control marks the 3
+  # entries the recall report's control check runs against.
+  # ---------------------------------------------------------------------------
+  - id: control-edge
+    host: edge-7f3a2c
+    hostname: "edge-7f3a2c.{base_domain}"
+    ports: []
+    scheme: null
+    app: "control host - A record only, no service, no cert"
+    tier: control
+    discovery: none
+    discovery_channel: none
+    expected_templates: []
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: control-w2-internal
+    host: w2-internal-9x
+    hostname: "w2-internal-9x.{base_domain}"
+    ports: []
+    scheme: null
+    app: "control host - A record only, no service, no cert"
+    tier: control
+    discovery: none
+    discovery_channel: none
+    expected_templates: []
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: control-unlisted
+    host: unlisted-b41
+    hostname: "unlisted-b41.{base_domain}"
+    ports: []
+    scheme: null
+    app: "control host - A record only, no service, no cert"
+    tier: control
+    discovery: none
+    discovery_channel: none
     expected_templates: []
     custom_template: false
     certificate_issues: []

@@ -30,6 +30,33 @@ The **authoritative** list of every hostname, port, certificate defect, planted
 [`groundtruth/catalogue.yaml`](groundtruth/catalogue.yaml). Everything else in
 this repo must agree with it.
 
+## Discovery channels
+
+Every scenario carries a `discovery_channel`, mirroring
+`modules/test-range/dns.tf`'s `local.range_hosts` map - the point is to
+measure *how* the scanner finds hosts, not just whether it finds vulnerabilities:
+
+- **`ct`** - the hostname gets its own publicly-trusted ACM cert
+  (`modules/test-range/ct_certs.tf`), issued and logged to certificate-
+  transparency logs. Discoverable the way a real subfinder/crt.sh-style CT
+  sweep finds subdomains, independent of any wordlist.
+- **`brute_force`** - a common dictionary label (`www`, `api`, `admin`, ...)
+  with no individual cert. Only findable by an active subdomain/vhost
+  brute-force stage.
+- **`none`** - three unguessable control labels (`edge-7f3a2c`,
+  `w2-internal-9x`, `unlisted-b41`, `tier: control` in the catalogue) with a
+  plain A record and no cert. These are the discovery-ceiling control: they
+  must **never** be discovered. If one turns up in the product, it's a leak
+  or an over-broad wordlist, not a scanner win. (A few other scenarios also
+  carry `discovery_channel: none` for a different reason - raw legacy
+  services reached by IP/port, not by hostname - those are not controls and
+  are excluded from the control check; see `tier: control` vs `tier: service`
+  in the catalogue.)
+
+`recall/report.py` reports discovery recall (was the asset found at all) per
+`ct`/`brute_force` channel, separately from template-id recall/precision
+(did the finding actually fire), plus the control check above.
+
 ## Layout
 
 ```
