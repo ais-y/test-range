@@ -1,0 +1,19 @@
+[project]
+name = "aisy-test-range"
+version = "0.1.0"
+description = "Ground-truth generation and recall reporting for the AIS-Y test range"
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+range-groundtruth = "groundtruth.generate:main"
+range-recall = "recall.report:main"
+
+[tool.setuptools]
+packages = ["groundtruth", "recall"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

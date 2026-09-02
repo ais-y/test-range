@@ -1,0 +1,8 @@
+# AIS-Y test range security contact (template).
+# Replace {base_domain} and {expires} at deploy time.
+Contact: mailto:security@aisy.ai
+Expires: {expires}
+Preferred-Languages: en
+Canonical: https://{base_domain}/.well-known/security.txt
+# This is a deliberately-vulnerable internal test range. Findings against it are
+# expected; do not report them - they are the point.

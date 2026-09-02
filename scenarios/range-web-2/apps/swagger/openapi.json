@@ -1,0 +1,9 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Range API", "version": "1.0.0" },
+  "paths": {
+    "/range/ping": {
+      "get": { "summary": "range ping", "responses": { "200": { "description": "ok" } } }
+    }
+  }
+}

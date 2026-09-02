@@ -1,0 +1,3 @@
+[console_scripts]
+range-groundtruth = groundtruth.generate:main
+range-recall = recall.report:main

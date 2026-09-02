@@ -1,0 +1,549 @@
+# AIS-Y test-range authoritative ground-truth catalogue.
+#
+# One entry per scenario. This is the known-answer set: every hostname, port,
+# certificate defect, planted (fake) secret, and the nuclei template id(s) the
+# scanner MUST trip. groundtruth/generate.py resolves the {eip}/{base_domain}
+# placeholders from Terraform outputs and emits manifest.json.
+#
+# template ids below are the range's real custom-template ids. Tier-2 entries
+# whose id is not in that custom list carry `custom_template: false` so the
+# recall report can weight them separately.
+#
+# discovery: how the asset is meant to enter the attack surface.
+#   ct-log      - published via a certificate, found through CT logs
+#   brute-force - only reachable by subdomain/vhost brute force
+#   seed        - handed to the scanner as an explicit seed root
+#   none        - raw service, not a web asset (legacy host)
+
+meta:
+  range: aisy-test-range
+  # base_domain and the per-host EIPs are filled from Terraform outputs by
+  # generate.py; catalogue keeps the logical hostnames only.
+  base_domain: "{base_domain}"
+  contact: security@aisy.ai
+
+scenarios:
+  # ---------------------------------------------------------------------------
+  # range-web-1 (k3s) - tier-1 exploitable applications
+  # ---------------------------------------------------------------------------
+  - id: log4shell
+    host: range-web-1
+    hostname: "log4j.{base_domain}"
+    ports: [8080]
+    scheme: http
+    app: "log4shell target (vulnerable-app pinned to log4j 2.14.1)"
+    tier: 1
+    discovery: seed
+    expected_templates: ["log4j-rce"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: mongo-express
+    host: range-web-1
+    hostname: "mongo-express.{base_domain}"
+    ports: [8081]
+    scheme: http
+    app: "mongo-express 0.54.0 (CVE-2019-10758 RCE via endpoint)"
+    tier: 1
+    discovery: brute-force
+    expected_templates: ["CVE-2019-10758"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: apache-proxy
+    host: range-web-1
+    hostname: "apache-proxy.{base_domain}"
+    ports: [8082]
+    scheme: http
+    app: "Apache httpd 2.4.48 mod_proxy (CVE-2021-40438 SSRF)"
+    tier: 1
+    discovery: brute-force
+    expected_templates: ["CVE-2021-40438"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: spring-cloud-gateway
+    host: range-web-1
+    hostname: "scg.{base_domain}"
+    ports: [8083]
+    scheme: http
+    app: "Spring Cloud Gateway 3.1.0 + actuator (CVE-2022-22947 SpEL RCE)"
+    tier: 1
+    discovery: seed
+    expected_templates: ["CVE-2022-22947", "springboot-actuators"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: go-pprof
+    host: range-web-1
+    hostname: "pprof.{base_domain}"
+    ports: [6060]
+    scheme: http
+    app: "Go net/http/pprof debug endpoints exposed"
+    tier: 1
+    discovery: brute-force
+    expected_templates: ["exposed_pprof"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: exposed-git
+    host: range-web-1
+    hostname: "git.{base_domain}"
+    ports: [80]
+    scheme: http
+    app: "static site serving a checked-in .git/ directory"
+    tier: 1
+    discovery: seed
+    expected_templates: ["git-config"]
+    custom_template: true
+    certificate_issues: []
+    # planted fake AWS key lives inside the leaked git config/history
+    planted_secrets:
+      - kind: aws_access_key_id
+        location: ".git/config leaked remote / history"
+        value: "AKIAFAKECANARYRANGE01"
+
+  - id: laravel-debug
+    host: range-web-1
+    hostname: "laravel.{base_domain}"
+    ports: [8000]
+    scheme: http
+    app: "Laravel app with APP_DEBUG=true (debug-mode info leak via POST)"
+    tier: 1
+    discovery: brute-force
+    expected_templates: ["laravel-debug-post"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets:
+      - kind: laravel_app_key
+        location: "debug stack trace env dump"
+        value: "base64:FAKECANARYAPPKEYrange0000000000000000000000="
+
+  - id: path-traversal-umbraco
+    host: range-web-1
+    hostname: "umbraco.{base_domain}"
+    ports: [8084]
+    scheme: http
+    app: "path-traversal facade shaped as Umbraco CMS local-file-open"
+    tier: 1
+    discovery: brute-force
+    expected_templates: ["Umbraco-CMS-LFO"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: path-traversal-wordpress
+    host: range-web-1
+    hostname: "wp.{base_domain}"
+    ports: [8085]
+    scheme: http
+    app: "path-traversal facade shaped as a WordPress plugin LFI"
+    tier: 1
+    discovery: brute-force
+    expected_templates: ["wordpress_lfi"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: sql-error
+    host: range-web-1
+    hostname: "sqli.{base_domain}"
+    ports: [8086]
+    scheme: http
+    app: "app that reflects raw SQL errors on tampered id param"
+    tier: 1
+    discovery: seed
+    expected_templates: ["SQLInjection_ERROR", "errors"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: dom-xss
+    host: range-web-1
+    hostname: "xss.{base_domain}"
+    ports: [8087]
+    scheme: http
+    app: "single-page app with reflected + DOM-based XSS sink"
+    tier: 1
+    discovery: seed
+    expected_templates: ["dom-xss"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  # ---------------------------------------------------------------------------
+  # range-web-2 (docker-compose) - fingerprint facades + tier-2 detectors
+  # ---------------------------------------------------------------------------
+  - id: salesforce-aura
+    host: range-web-2
+    hostname: "sfdc.{base_domain}"
+    ports: [443]
+    scheme: https
+    app: "static facade emitting Salesforce Lightning aura fingerprints"
+    tier: fingerprint
+    discovery: ct-log
+    expected_templates: ["salesforce-aura"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: aem
+    host: range-web-2
+    hostname: "aem.{base_domain}"
+    ports: [443]
+    scheme: https
+    app: "static facade emitting Adobe AEM fingerprints"
+    tier: fingerprint
+    discovery: ct-log
+    expected_templates: ["aem-tech-detect"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: telerik
+    host: range-web-2
+    hostname: "telerik.{base_domain}"
+    ports: [443]
+    scheme: https
+    app: "static facade emitting Telerik UI fingerprints"
+    tier: fingerprint
+    discovery: ct-log
+    expected_templates: ["telerik-detect"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: shiro
+    host: range-web-2
+    hostname: "shiro.{base_domain}"
+    ports: [8088]
+    scheme: http
+    app: "app that sets a rememberMe Apache Shiro cookie"
+    tier: fingerprint
+    discovery: brute-force
+    expected_templates: ["shiro-detect"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: moveit
+    host: range-web-2
+    hostname: "moveit.{base_domain}"
+    ports: [443]
+    scheme: https
+    app: "static facade shaped as Progress MOVEit Transfer"
+    tier: fingerprint
+    discovery: ct-log
+    expected_templates: ["MOVEIT-SQLi"]
+    custom_template: true
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: graphql-introspection
+    host: range-web-2
+    hostname: "graphql.{base_domain}"
+    ports: [8089]
+    scheme: http
+    app: "GraphQL endpoint with introspection enabled"
+    tier: 2
+    discovery: brute-force
+    expected_templates: ["graphql-introspection"]
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: badsecrets-cookie
+    host: range-web-2
+    hostname: "viewstate.{base_domain}"
+    ports: [8090]
+    scheme: http
+    app: "app serving an ASP.NET viewstate cookie signed with a known test key"
+    tier: 2
+    discovery: brute-force
+    expected_templates: ["badsecrets-known-key"]
+    custom_template: false
+    certificate_issues: []
+    planted_secrets:
+      - kind: known_test_signing_key
+        location: "__VIEWSTATE MAC key (public badsecrets test key)"
+        value: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+  - id: cache-poisoning
+    host: range-web-2
+    hostname: "cache.{base_domain}"
+    ports: [8091]
+    scheme: http
+    app: "reflector that echoes an unkeyed X-Forwarded-Host header"
+    tier: 2
+    discovery: brute-force
+    expected_templates: ["cache-poisoning-reflector"]
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: forbidden-bypass
+    host: range-web-2
+    hostname: "admin-403.{base_domain}"
+    ports: [8092]
+    scheme: http
+    app: "path returning 403 that is bypassable via header/path tricks"
+    tier: 2
+    discovery: brute-force
+    expected_templates: ["403-bypass"]
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: swagger
+    host: range-web-2
+    hostname: "api.{base_domain}"
+    ports: [8093]
+    scheme: http
+    app: "service exposing a swagger/openapi spec at /openapi.json"
+    tier: 2
+    discovery: seed
+    expected_templates: ["swagger-api"]
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: js-secret-bundle
+    host: range-web-2
+    hostname: "app.{base_domain}"
+    ports: [8094]
+    scheme: http
+    app: "SPA whose JS bundle leaks an internal path + a fake API key"
+    tier: 2
+    discovery: seed
+    expected_templates: ["js-exposed-key"]
+    custom_template: false
+    certificate_issues: []
+    planted_secrets:
+      - kind: generic_api_key
+        location: "main.js bundle"
+        value: "sk-range-FAKECANARY-000000000000000000"
+      - kind: internal_path
+        location: "main.js bundle"
+        value: "/internal/admin/metrics"
+
+  - id: vhosts
+    host: range-web-2
+    hostname: "staging.{base_domain}"
+    ports: [80]
+    scheme: http
+    app: "name-based vhost only reachable via Host header (brute-force target)"
+    tier: 2
+    discovery: brute-force
+    expected_templates: ["vhost-detect"]
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: iis-shape
+    host: range-web-2
+    hostname: "iis.{base_domain}"
+    ports: [8095]
+    scheme: http
+    app: "static facade emitting IIS server headers + shape"
+    tier: 2
+    discovery: brute-force
+    expected_templates: ["iis-detect"]
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: default-cred-admin
+    host: range-web-2
+    hostname: "portal.{base_domain}"
+    ports: [8096]
+    scheme: http
+    app: "admin panel accepting a documented default credential"
+    tier: 2
+    discovery: brute-force
+    expected_templates: ["default-login"]
+    custom_template: false
+    certificate_issues: []
+    planted_secrets:
+      - kind: default_credential
+        location: "admin login form"
+        value: "admin:admin (documented default, fake range account)"
+
+  # ---------------------------------------------------------------------------
+  # Certificate defect hosts (range-web-2 TLS terminators) - see certs/generate.sh
+  # ---------------------------------------------------------------------------
+  - id: cert-expired
+    host: range-web-2
+    hostname: "expired.{base_domain}"
+    ports: [443]
+    scheme: https
+    app: "TLS terminator presenting an expired certificate"
+    tier: cert
+    discovery: ct-log
+    expected_templates: []
+    custom_template: false
+    certificate_issues: ["expired"]
+    planted_secrets: []
+
+  - id: cert-self-signed
+    host: range-web-2
+    hostname: "self-signed.{base_domain}"
+    ports: [443]
+    scheme: https
+    app: "TLS terminator presenting a self-signed certificate"
+    tier: cert
+    discovery: brute-force
+    expected_templates: []
+    custom_template: false
+    certificate_issues: ["self_signed"]
+    planted_secrets: []
+
+  - id: cert-mismatch
+    host: range-web-2
+    hostname: "mismatch.{base_domain}"
+    ports: [443]
+    scheme: https
+    app: "TLS terminator whose cert CN/SAN does not match the hostname"
+    tier: cert
+    discovery: brute-force
+    expected_templates: []
+    custom_template: false
+    certificate_issues: ["name_mismatch"]
+    planted_secrets: []
+
+  - id: cert-oldtls
+    host: range-web-2
+    hostname: "oldtls.{base_domain}"
+    ports: [443]
+    scheme: https
+    app: "TLS terminator negotiating only TLS 1.0/1.1 with weak ciphers"
+    tier: cert
+    discovery: brute-force
+    expected_templates: []
+    custom_template: false
+    certificate_issues: ["weak_tls"]
+    planted_secrets: []
+
+  - id: cert-expiring
+    host: range-web-2
+    hostname: "expiring.{base_domain}"
+    ports: [443]
+    scheme: https
+    app: "TLS terminator whose certificate expires soon (< 14 days)"
+    tier: cert
+    discovery: ct-log
+    expected_templates: []
+    custom_template: false
+    certificate_issues: ["expiring_soon"]
+    planted_secrets: []
+
+  # ---------------------------------------------------------------------------
+  # range-legacy (docker-compose) - raw services + banner-only sockets
+  # ---------------------------------------------------------------------------
+  - id: legacy-ftp
+    host: range-legacy
+    hostname: "legacy.{base_domain}"
+    ports: [21]
+    scheme: ftp
+    app: "real vsftpd with an empty anonymous share"
+    tier: service
+    discovery: none
+    expected_templates: []
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: legacy-mysql
+    host: range-legacy
+    hostname: "legacy.{base_domain}"
+    ports: [3306]
+    scheme: mysql
+    app: "real MySQL with an empty database (banner reachable)"
+    tier: service
+    discovery: none
+    expected_templates: []
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: legacy-postgres
+    host: range-legacy
+    hostname: "legacy.{base_domain}"
+    ports: [5432]
+    scheme: postgres
+    app: "real PostgreSQL with an empty database (banner reachable)"
+    tier: service
+    discovery: none
+    expected_templates: []
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: legacy-redis
+    host: range-legacy
+    hostname: "legacy.{base_domain}"
+    ports: [6379]
+    scheme: redis
+    app: "real Redis with no data (banner reachable)"
+    tier: service
+    discovery: none
+    expected_templates: []
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: legacy-banner-ssh
+    host: range-legacy
+    hostname: "legacy.{base_domain}"
+    ports: [22]
+    scheme: tcp
+    app: "banner-only socket announcing an old OpenSSH version"
+    tier: banner
+    discovery: none
+    expected_templates: []
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: legacy-banner-telnet
+    host: range-legacy
+    hostname: "legacy.{base_domain}"
+    ports: [23]
+    scheme: tcp
+    app: "banner-only socket announcing a telnet login prompt"
+    tier: banner
+    discovery: none
+    expected_templates: []
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: legacy-banner-smb
+    host: range-legacy
+    hostname: "legacy.{base_domain}"
+    ports: [445]
+    scheme: tcp
+    app: "banner-only socket announcing an SMB service"
+    tier: banner
+    discovery: none
+    expected_templates: []
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []
+
+  - id: legacy-banner-rdp
+    host: range-legacy
+    hostname: "legacy.{base_domain}"
+    ports: [3389]
+    scheme: tcp
+    app: "banner-only socket announcing an RDP service"
+    tier: banner
+    discovery: none
+    expected_templates: []
+    custom_template: false
+    certificate_issues: []
+    planted_secrets: []

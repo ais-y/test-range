@@ -1,0 +1,17 @@
+# generated ground truth
+groundtruth/manifest.json
+
+# generated certs / keys (never commit private keys)
+certs/out/
+*.key
+*.crt
+*.csr
+*.srl
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# terraform outputs captured locally
+outputs.json

@@ -1,0 +1,63 @@
+# range-legacy - real (empty) data services + banner-only sockets.
+#
+# DELIBERATELY EXPOSED for discovery/fingerprinting. Bring up only inside the
+# isolated range host. The real services hold NO data (fresh, empty volumes,
+# range-only throwaway credentials). The banner sockets answer with a version
+# string and nothing else - there is no service behind them.
+
+x-banner: &banner
+  build: ./banner
+  image: range/banner:local
+  restart: unless-stopped
+
+services:
+  # --- real services, empty data -------------------------------------------
+  ftp:                        # legacy-ftp
+    image: fauria/vsftpd:latest
+    restart: unless-stopped
+    environment:
+      FTP_USER: "range"
+      FTP_PASS: "range-fake-canary"   # throwaway, range-only
+    ports: ["21:21", "21100-21110:21100-21110"]
+
+  mysql:                      # legacy-mysql (empty db)
+    image: mysql:5.7
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "range-fake-canary"
+      MYSQL_DATABASE: "empty"
+    ports: ["3306:3306"]
+
+  postgres:                   # legacy-postgres (empty db)
+    image: postgres:13
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: "range-fake-canary"
+      POSTGRES_DB: "empty"
+    ports: ["5432:5432"]
+
+  redis:                      # legacy-redis (no data, no auth)
+    image: redis:6
+    restart: unless-stopped
+    ports: ["6379:6379"]
+
+  # --- banner-only sockets (no real service behind them) -------------------
+  banner-ssh:                 # legacy-banner-ssh
+    <<: *banner
+    environment: { BANNER: "SSH-2.0-OpenSSH_7.2p2 Ubuntu-4ubuntu2.8\r\n" }
+    ports: ["22:9000"]
+
+  banner-telnet:              # legacy-banner-telnet
+    <<: *banner
+    environment: { BANNER: "\r\nDebian GNU/Linux 7\r\nlogin: " }
+    ports: ["23:9000"]
+
+  banner-smb:                 # legacy-banner-smb
+    <<: *banner
+    environment: { BANNER: "\x00\x00\x00\x85SMB range fileserver\r\n" }
+    ports: ["445:9000"]
+
+  banner-rdp:                 # legacy-banner-rdp
+    <<: *banner
+    environment: { BANNER: "\x03\x00\x00\x13 RDP range terminal\r\n" }
+    ports: ["3389:9000"]

@@ -1,0 +1,311 @@
+# range-web-1 (k3s) - tier-1 exploitable applications.
+#
+# DELIBERATELY VULNERABLE. Apply only inside the isolated range k3s cluster.
+# Images are pinned to vulnerable versions; they are targets, never attackers.
+# Host cloud-init runs: k3s kubectl apply -f manifest.yaml
+#
+# Each app is a Deployment + ClusterIP Service. An IngressRoute maps the
+# per-scenario hostname (log4j., mongo-express., ... .<base_domain>) onto the
+# service. The base domain is patched in by cloud-init before apply.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: range
+---
+# log4shell -> log4j-rce
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: log4shell, namespace: range }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: log4shell } }
+  template:
+    metadata: { labels: { app: log4shell } }
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/christophetd/log4shell-vulnerable-app:latest
+          ports: [{ containerPort: 8080 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: log4shell, namespace: range }
+spec:
+  selector: { app: log4shell }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+# mongo-express 0.54 -> CVE-2019-10758
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: mongo-express, namespace: range }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mongo-express } }
+  template:
+    metadata: { labels: { app: mongo-express } }
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:4.0
+          ports: [{ containerPort: 27017 }]
+        - name: express
+          image: mongo-express:0.54.0
+          env:
+            - { name: ME_CONFIG_MONGODB_SERVER, value: "127.0.0.1" }
+            - { name: ME_CONFIG_BASICAUTH_USERNAME, value: "admin" }
+            - { name: ME_CONFIG_BASICAUTH_PASSWORD, value: "admin" }  # fake range default
+          ports: [{ containerPort: 8081 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: mongo-express, namespace: range }
+spec:
+  selector: { app: mongo-express }
+  ports: [{ port: 8081, targetPort: 8081 }]
+---
+# Apache 2.4.48 mod_proxy -> CVE-2021-40438
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: apache-proxy, namespace: range }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: apache-proxy } }
+  template:
+    metadata: { labels: { app: apache-proxy } }
+    spec:
+      containers:
+        - name: httpd
+          image: httpd:2.4.48
+          ports: [{ containerPort: 80 }]
+          # cloud-init mounts a mod_proxy vhost config enabling ProxyPass.
+---
+apiVersion: v1
+kind: Service
+metadata: { name: apache-proxy, namespace: range }
+spec:
+  selector: { app: apache-proxy }
+  ports: [{ port: 8082, targetPort: 80 }]
+---
+# Spring Cloud Gateway 3.1.0 + actuator -> CVE-2022-22947 / springboot-actuators
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: spring-cloud-gateway, namespace: range }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: spring-cloud-gateway } }
+  template:
+    metadata: { labels: { app: spring-cloud-gateway } }
+    spec:
+      containers:
+        - name: scg
+          image: vulhub/spring-cloud-gateway:3.1.0
+          ports: [{ containerPort: 8080 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: spring-cloud-gateway, namespace: range }
+spec:
+  selector: { app: spring-cloud-gateway }
+  ports: [{ port: 8083, targetPort: 8080 }]
+---
+# Go net/http/pprof exposed -> exposed_pprof
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: go-pprof, namespace: range }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: go-pprof } }
+  template:
+    metadata: { labels: { app: go-pprof } }
+    spec:
+      containers:
+        - name: pprof
+          image: range/go-pprof:local   # built in build/go-pprof, exposes /debug/pprof
+          ports: [{ containerPort: 6060 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: go-pprof, namespace: range }
+spec:
+  selector: { app: go-pprof }
+  ports: [{ port: 6060, targetPort: 6060 }]
+---
+# exposed .git -> git-config  (nginx serving a checked-in .git with a fake key)
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: exposed-git, namespace: range }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: exposed-git } }
+  template:
+    metadata: { labels: { app: exposed-git } }
+    spec:
+      containers:
+        - name: nginx
+          image: range/exposed-git:local  # built in build/exposed-git
+          ports: [{ containerPort: 80 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: exposed-git, namespace: range }
+spec:
+  selector: { app: exposed-git }
+  ports: [{ port: 80, targetPort: 80 }]
+---
+# Laravel APP_DEBUG=true -> laravel-debug-post
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: laravel-debug, namespace: range }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: laravel-debug } }
+  template:
+    metadata: { labels: { app: laravel-debug } }
+    spec:
+      containers:
+        - name: laravel
+          image: range/laravel-debug:local  # built in build/laravel-debug
+          env:
+            - { name: APP_DEBUG, value: "true" }
+            - { name: APP_KEY, value: "base64:FAKECANARYAPPKEYrange0000000000000000000000=" }
+          ports: [{ containerPort: 8000 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: laravel-debug, namespace: range }
+spec:
+  selector: { app: laravel-debug }
+  ports: [{ port: 8000, targetPort: 8000 }]
+---
+# path-traversal facade (Umbraco shape) -> Umbraco-CMS-LFO
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: umbraco-lfo, namespace: range }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: umbraco-lfo } }
+  template:
+    metadata: { labels: { app: umbraco-lfo } }
+    spec:
+      containers:
+        - name: app
+          image: range/path-traversal:local  # MODE=umbraco
+          env: [{ name: MODE, value: "umbraco" }]
+          ports: [{ containerPort: 8080 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: umbraco-lfo, namespace: range }
+spec:
+  selector: { app: umbraco-lfo }
+  ports: [{ port: 8084, targetPort: 8080 }]
+---
+# path-traversal facade (WordPress plugin LFI shape) -> wordpress_lfi
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: wordpress-lfi, namespace: range }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: wordpress-lfi } }
+  template:
+    metadata: { labels: { app: wordpress-lfi } }
+    spec:
+      containers:
+        - name: app
+          image: range/path-traversal:local  # MODE=wordpress
+          env: [{ name: MODE, value: "wordpress" }]
+          ports: [{ containerPort: 8080 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: wordpress-lfi, namespace: range }
+spec:
+  selector: { app: wordpress-lfi }
+  ports: [{ port: 8085, targetPort: 8080 }]
+---
+# SQL-error reflector -> SQLInjection_ERROR / errors
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: sql-error, namespace: range }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: sql-error } }
+  template:
+    metadata: { labels: { app: sql-error } }
+    spec:
+      containers:
+        - name: app
+          image: range/sql-error:local  # reflects a raw SQL error on ?id=
+          ports: [{ containerPort: 8080 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: sql-error, namespace: range }
+spec:
+  selector: { app: sql-error }
+  ports: [{ port: 8086, targetPort: 8080 }]
+---
+# reflected + DOM XSS -> dom-xss
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: dom-xss, namespace: range }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: dom-xss } }
+  template:
+    metadata: { labels: { app: dom-xss } }
+    spec:
+      containers:
+        - name: app
+          image: range/dom-xss:local  # innerHTML sink on location.hash
+          ports: [{ containerPort: 8080 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: dom-xss, namespace: range }
+spec:
+  selector: { app: dom-xss }
+  ports: [{ port: 8087, targetPort: 8080 }]
+---
+# Ingress: hostname -> service. Traefik ships with k3s. __BASE_DOMAIN__ is
+# substituted by cloud-init before apply.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata: { name: range-web-1, namespace: range }
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`log4j.__BASE_DOMAIN__`)
+      kind: Rule
+      services: [{ name: log4shell, port: 8080 }]
+    - match: Host(`mongo-express.__BASE_DOMAIN__`)
+      kind: Rule
+      services: [{ name: mongo-express, port: 8081 }]
+    - match: Host(`apache-proxy.__BASE_DOMAIN__`)
+      kind: Rule
+      services: [{ name: apache-proxy, port: 8082 }]
+    - match: Host(`scg.__BASE_DOMAIN__`)
+      kind: Rule
+      services: [{ name: spring-cloud-gateway, port: 8083 }]
+    - match: Host(`pprof.__BASE_DOMAIN__`)
+      kind: Rule
+      services: [{ name: go-pprof, port: 6060 }]
+    - match: Host(`git.__BASE_DOMAIN__`)
+      kind: Rule
+      services: [{ name: exposed-git, port: 80 }]
+    - match: Host(`laravel.__BASE_DOMAIN__`)
+      kind: Rule
+      services: [{ name: laravel-debug, port: 8000 }]
+    - match: Host(`umbraco.__BASE_DOMAIN__`)
+      kind: Rule
+      services: [{ name: umbraco-lfo, port: 8084 }]
+    - match: Host(`wp.__BASE_DOMAIN__`)
+      kind: Rule
+      services: [{ name: wordpress-lfi, port: 8085 }]
+    - match: Host(`sqli.__BASE_DOMAIN__`)
+      kind: Rule
+      services: [{ name: sql-error, port: 8086 }]
+    - match: Host(`xss.__BASE_DOMAIN__`)
+      kind: Rule
+      services: [{ name: dom-xss, port: 8087 }]

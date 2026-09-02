@@ -1,0 +1,129 @@
+# range-web-2 - fingerprint facades, tier-2 detectors, and the five
+# cert-defect TLS terminators.
+#
+# DELIBERATELY VULNERABLE. Bring up only inside the isolated range host.
+# Facades are static nginx responders that emit a technology's fingerprint;
+# they hold no real backend. tier-2 apps are minimal responders. TLS
+# terminators serve the defective certs produced by certs/generate.sh.
+#
+# Run certs/generate.sh (writes ../../certs/out) before `docker compose up`.
+
+x-nginx: &nginx
+  image: nginx:1.25-alpine
+  restart: unless-stopped
+
+services:
+  # --- fingerprint facades --------------------------------------------------
+  salesforce-aura:            # -> salesforce-aura
+    <<: *nginx
+    volumes: ["./facades/salesforce-aura:/usr/share/nginx/html:ro"]
+    ports: ["8443:443"]
+    # TLS terminator config lives alongside the html; ct-log discovery needs 443.
+
+  aem:                        # -> aem-tech-detect
+    <<: *nginx
+    volumes: ["./facades/aem:/usr/share/nginx/html:ro"]
+    ports: ["8444:443"]
+
+  telerik:                    # -> telerik-detect
+    <<: *nginx
+    volumes: ["./facades/telerik:/usr/share/nginx/html:ro"]
+    ports: ["8445:443"]
+
+  moveit:                     # -> MOVEIT-SQLi (shape only, no SQLi backend)
+    <<: *nginx
+    volumes: ["./facades/moveit:/usr/share/nginx/html:ro"]
+    ports: ["8446:443"]
+
+  shiro:                      # -> shiro-detect (sets rememberMe cookie)
+    image: range/shiro-facade:local
+    build: ./facades/shiro
+    restart: unless-stopped
+    ports: ["8088:8080"]
+
+  # --- tier-2 detectors -----------------------------------------------------
+  graphql:                    # -> graphql-introspection
+    image: range/graphql-introspection:local
+    build: ./apps/graphql
+    restart: unless-stopped
+    ports: ["8089:8080"]
+
+  viewstate:                  # -> badsecrets-known-key (public test key, fake)
+    image: range/viewstate:local
+    build: ./apps/viewstate
+    restart: unless-stopped
+    ports: ["8090:8080"]
+
+  cache:                      # -> cache-poisoning-reflector
+    image: range/cache-reflector:local
+    build: ./apps/cache-reflector
+    restart: unless-stopped
+    ports: ["8091:8080"]
+
+  forbidden-bypass:           # -> 403-bypass
+    <<: *nginx
+    volumes: ["./apps/forbidden-bypass/nginx.conf:/etc/nginx/conf.d/default.conf:ro"]
+    ports: ["8092:80"]
+
+  swagger:                    # -> swagger-api
+    <<: *nginx
+    volumes: ["./apps/swagger:/usr/share/nginx/html:ro"]
+    ports: ["8093:80"]
+
+  jsapp:                      # -> js-exposed-key (fake key + internal path)
+    <<: *nginx
+    volumes: ["./apps/jsapp:/usr/share/nginx/html:ro"]
+    ports: ["8094:80"]
+
+  vhosts:                     # -> vhost-detect (name-based staging vhost)
+    <<: *nginx
+    volumes: ["./apps/vhosts/nginx.conf:/etc/nginx/conf.d/default.conf:ro"]
+    ports: ["8097:80"]
+
+  iis:                        # -> iis-detect (Server: Microsoft-IIS shape)
+    <<: *nginx
+    volumes: ["./apps/iis/nginx.conf:/etc/nginx/conf.d/default.conf:ro"]
+    ports: ["8095:80"]
+
+  portal:                     # -> default-login (admin:admin, fake account)
+    image: range/default-cred-admin:local
+    build: ./apps/default-cred-admin
+    restart: unless-stopped
+    ports: ["8096:8080"]
+
+  # --- cert-defect TLS terminators -----------------------------------------
+  # Each serves one defective cert from certs/out. See certs/generate.sh.
+  cert-expired:               # certificate_issues: expired
+    <<: *nginx
+    volumes:
+      - "../../certs/out:/certs:ro"
+      - "./tls/expired.conf:/etc/nginx/conf.d/default.conf:ro"
+    ports: ["9443:443"]
+
+  cert-self-signed:           # certificate_issues: self_signed
+    <<: *nginx
+    volumes:
+      - "../../certs/out:/certs:ro"
+      - "./tls/self-signed.conf:/etc/nginx/conf.d/default.conf:ro"
+    ports: ["9444:443"]
+
+  cert-mismatch:              # certificate_issues: name_mismatch
+    <<: *nginx
+    volumes:
+      - "../../certs/out:/certs:ro"
+      - "./tls/mismatch.conf:/etc/nginx/conf.d/default.conf:ro"
+    ports: ["9445:443"]
+
+  cert-oldtls:                # certificate_issues: weak_tls
+    <<: *nginx
+    volumes:
+      - "../../certs/out:/certs:ro"
+      - "../../certs/out/oldtls.nginx.conf:/etc/nginx/conf.d/default.conf:ro"
+    ports: ["9446:443"]
+
+  cert-expiring:              # certificate_issues: expiring_soon
+    <<: *nginx
+    volumes:
+      - "../../certs/out:/certs:ro"
+      - "./tls/expiring.conf:/etc/nginx/conf.d/default.conf:ro"
+    ports: ["9447:443"]
